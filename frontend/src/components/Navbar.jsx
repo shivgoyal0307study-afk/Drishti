@@ -111,7 +111,7 @@ export default function Navbar() {
       try {
         const res = await fetch(`${API_BASE}/health`)
         const d = await res.json()
-        setConnected(d.status === 'ok' || d.status === 'healthy')
+        setConnected(d.success === true || d.status === 'ok' || d.status === 'healthy')
       } catch { setConnected(false) }
     }
     check()

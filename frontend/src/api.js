@@ -53,7 +53,7 @@ export async function getHealth() {
   try {
     const d = await _get('/health')
     return {
-      status:               d.status === 'healthy' || d.status === 'ok' ? 'ok' : d.status,
+      status:               (d.success === true || d.status === 'healthy' || d.status === 'ok') ? 'ok' : d.status,
       websocket_connections: d.websocket_connections ?? 0,
       database:             d.database ?? 'ok',
       started_at:           null,      // not exposed by backend yet
