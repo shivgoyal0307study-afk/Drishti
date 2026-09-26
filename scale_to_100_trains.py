@@ -196,7 +196,7 @@ STATIONS_MAP = {
 
 async def generate_scaled_trains():
     """Generate 100+ trains across all zones with realistic delays/cascading."""
-    print("\n🚂 DRISHTI SCALE-UP: 100+ TRAINS ACROSS ALL ZONES")
+    print("\n--- DRISHTI SCALE-UP: 100+ TRAINS ACROSS ALL ZONES ---")
     print("=" * 70)
     
     repo = TrainDataRepository()
@@ -234,7 +234,7 @@ async def generate_scaled_trains():
             summary = repo.ingest_train_states([state], source="scaled_roster")
             ingested += summary["records_persisted"]
         except Exception as e:
-            print(f"  ⚠ Failed to ingest {train_id}: {e}")
+            print(f"  [WARN] Failed to ingest {train_id}: {e}")
     
     # Query and show summary
     trains = db.query(Train).all()
@@ -246,17 +246,17 @@ async def generate_scaled_trains():
             zones_data[z] = 0
         zones_data[z] += 1
     
-    print(f"\n✅ Ingested: {ingested} trains across {len(zones_data)} zones")
+    print(f"\n[OK] Ingested: {ingested} trains across {len(zones_data)} zones")
     print(f"\nZone Distribution:")
     for zone in sorted(zones_data.keys()):
         print(f"   {zone:6s}: {zones_data[zone]:3d} trains")
     
-    print(f"\n📊 High-Centrality Junctions (Cascade Risk):")
+    print(f"\n[INFO] High-Centrality Junctions (Cascade Risk):")
     high_risk = [t for t in trains if t.current_station_code in ["NDLS", "HWH", "BOMBAY", "MAS", "SC"]]
     for t in high_risk[:10]:
         tel = db.query(TrainTelemetry).filter(TrainTelemetry.train_id == t.train_id).order_by(TrainTelemetry.timestamp_utc.desc()).first()
         if tel:
-            print(f"   {t.train_id:6s} @ {t.current_station_code:8s}: {tel.delay_minutes:3d}min delay → HIGH CASCADE RISK")
+            print(f"   {t.train_id:6s} @ {t.current_station_code:8s}: {tel.delay_minutes:3d}min delay -> HIGH CASCADE RISK")
     
     db.close()
 
