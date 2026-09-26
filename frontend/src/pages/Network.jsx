@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip } from 'react-leaflet'
+import { CARTO_DARK_TILES } from '../api'
 import 'leaflet/dist/leaflet.css'
 import indianRailwayZones from '../assets/indian_railway_zones.svg'
 
@@ -736,7 +737,7 @@ export default function Network() {
             >
               {/* Dark CartoDB tiles */}
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                url={CARTO_DARK_TILES}
                 attribution="&copy; CARTO &copy; OSM"
               />
 

@@ -939,6 +939,31 @@ async def alerts_unified(
     return result
 
 
+@app.post("/api/notifications/test-call")
+async def trigger_test_call():
+    """Trigger a live emergency alert voice call via Twilio Voice."""
+    try:
+        from backend.notifications.gateway import NotificationRouter
+        router = NotificationRouter()
+        msgs = router.route_alert(
+            severity="CRITICAL",
+            train_id="12301",
+            station="Howrah Jn",
+            alert_title="Critical Collision Risk Test Alert",
+            alert_body="Automated safety override initiated by Drishti.",
+            details={"test": True}
+        )
+        voice_msg = next((m for m in msgs if m.channel.value == "voice"), None)
+        return {
+            "status": "ok",
+            "message": "Emergency voice call initiated",
+            "call_status": voice_msg.delivery_status if voice_msg else "unknown",
+            "recipient_phone": os.getenv("TWILIO_EMERGENCY_PHONE"),
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 @app.get("/api/ai/decisions")
 async def ai_decisions(limit: int = Query(20, le=100)):
     """
@@ -1168,6 +1193,7 @@ async def get_models_explainability():
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
+@app.websocket("/ws")
 @app.websocket("/ws/live")
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()

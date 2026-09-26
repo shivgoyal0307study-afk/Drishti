@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class NotificationChannel(str, Enum):
     """Supported notification channels"""
     SMS = "sms"                      # SMS to mobile
+    VOICE = "voice"                  # Voice call to mobile
     EMAIL = "email"                  # Email to address
     PUSH = "push"                    # Push notification to app
     IN_APP = "in_app"                # In-app message
@@ -64,6 +65,8 @@ class NotificationRecipient:
         channels = []
         if self.phone:
             channels.extend([NotificationChannel.SMS, NotificationChannel.WHATSAPP])
+            if self.role in [RecipientRole.LOCO_PILOT, RecipientRole.STATION_MASTER]:
+                channels.append(NotificationChannel.VOICE)
         if self.email:
             channels.append(NotificationChannel.EMAIL)
         if self.app_user_id:
@@ -179,14 +182,27 @@ class SMSBackend(NotificationBackend):
         import os
         account_sid = os.getenv('TWILIO_ACCOUNT_SID')
         auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+        api_key = os.getenv('TWILIO_API_KEY_SID') or os.getenv('TWILIO_API_KEY')
+        api_secret = os.getenv('TWILIO_API_KEY_SECRET')
         from_number = os.getenv('TWILIO_FROM_NUMBER')
         
-        if not all([account_sid, auth_token, from_number]):
+        has_key_auth = bool(api_key and api_secret)
+        has_token_auth = bool(account_sid and auth_token)
+
+        if not (has_key_auth or has_token_auth):
             logger.error("Twilio credentials not configured")
+            return False
+            
+        if not from_number:
+            logger.warning("TWILIO_FROM_NUMBER not set; Twilio SMS cannot specify sender")
             return False
         
         try:
-            client = Client(account_sid, auth_token)
+            if has_key_auth:
+                client = Client(api_key, api_secret, account_sid=account_sid)
+            else:
+                client = Client(account_sid, auth_token)
+                
             message = client.messages.create(
                 body=f"[{msg.severity}] {msg.title}: {msg.body}",
                 from_=from_number,
@@ -200,6 +216,87 @@ class SMSBackend(NotificationBackend):
             logger.error(f"Twilio SMS failed: {e}")
             return False
     
+    def get_status(self, notification_id: str) -> Dict:
+        return {'status': 'delivered', 'notification_id': notification_id}
+
+
+class VoiceBackend(NotificationBackend):
+    """Voice call delivery via Twilio Voice API for critical emergencies"""
+    
+    def __init__(self, provider: str = "twilio"):
+        self.provider = provider
+        self.sent_calls = []
+        self._last_call_time = 0.0
+        self._cooldown_seconds = 120  # 2-minute cooldown between calls to prevent spamming
+        
+    def send(self, msg: NotificationMessage) -> bool:
+        """Place an automated voice call"""
+        phone = msg.recipient.phone or os.getenv("TWILIO_EMERGENCY_PHONE")
+        if not phone:
+            logger.error(f"No phone for Voice Call: {msg.recipient.recipient_id}")
+            return False
+            
+        if self.provider == "mock":
+            logger.info(f"[VOICE MOCK] Calling {phone}: {msg.title}")
+            msg.delivery_status = "delivered"
+            msg.delivery_timestamp = datetime.now().isoformat()
+            return True
+        elif self.provider == "twilio":
+            return self._send_twilio_call(msg, phone)
+        else:
+            logger.warning(f"Unknown Voice provider: {self.provider}")
+            return False
+            
+    def _send_twilio_call(self, msg: NotificationMessage, to_phone: str) -> bool:
+        import os
+        import time
+        now = time.time()
+        if (now - self._last_call_time) < self._cooldown_seconds:
+            logger.warning(f"[VOICE] Rate limited: {int(self._cooldown_seconds - (now - self._last_call_time))}s cooldown remaining")
+            return False
+            
+        try:
+            from twilio.rest import Client
+        except ImportError:
+            logger.error("Twilio SDK not installed")
+            return False
+            
+        account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+        auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+        from_number = os.getenv('TWILIO_FROM_NUMBER')
+        
+        if not (account_sid and auth_token and from_number):
+            logger.error("Twilio Voice credentials not fully configured")
+            return False
+            
+        try:
+            client = Client(account_sid, auth_token)
+            clean_title = (msg.title or "Critical collision risk").replace('<', '').replace('>', '')
+            station_info = msg.alert_station or "active junction"
+            train_info = msg.alert_train_id or "monitored fleet"
+            twiml = (
+                f'<Response>'
+                f'<Say voice="Polly.Aditi" language="en-IN">'
+                f'Attention operations. This is an urgent safety alert from Drishti. '
+                f'Critical situation detected for train {train_info} at station {station_info}. '
+                f'{clean_title}. Immediate intervention required.'
+                f'</Say>'
+                f'</Response>'
+            )
+            call = client.calls.create(
+                twiml=twiml,
+                from_=from_number,
+                to=to_phone
+            )
+            self._last_call_time = now
+            logger.info(f"[VOICE] Critical alert call dispatched: SID {call.sid} to {to_phone}")
+            msg.delivery_status = "delivered"
+            msg.delivery_timestamp = datetime.now().isoformat()
+            return True
+        except Exception as e:
+            logger.error(f"[VOICE] Twilio Call failed: {e}")
+            return False
+            
     def get_status(self, notification_id: str) -> Dict:
         return {'status': 'delivered', 'notification_id': notification_id}
 
@@ -375,7 +472,11 @@ class NotificationRouter:
     """Routes alerts to appropriate recipients on appropriate channels"""
     
     def __init__(self):
-        self.sms_backend = SMSBackend(provider="mock")
+        import os
+        sms_provider = os.getenv("SMS_PROVIDER", "mock")
+        voice_provider = os.getenv("VOICE_PROVIDER", "twilio")
+        self.sms_backend = SMSBackend(provider=sms_provider)
+        self.voice_backend = VoiceBackend(provider=voice_provider)
         self.email_backend = EmailBackend(provider="mock")
         self.push_backend = PushBackend(provider="mock")
         self.central_backend = CentralLogBackend()
@@ -419,14 +520,16 @@ class NotificationRouter:
         """Determine who should be notified"""
         recipients = []
         
-        # CRITICAL: Alert everyone
+        # CRITICAL: Alert everyone + automated voice call to emergency phone
         if severity == "CRITICAL":
+            import os
+            emergency_phone = os.getenv("TWILIO_EMERGENCY_PHONE")
             recipients = [
                 NotificationRecipient(
                     recipient_id="LOCO_PILOT_001",
-                    name="Pilot A",
+                    name="Loco Pilot (Emergency)",
                     role=RecipientRole.LOCO_PILOT,
-                    phone="+918888888888",
+                    phone=emergency_phone,
                     email="pilot@ir.gov.in",
                     app_user_id="pilot_001"
                 ),
@@ -434,7 +537,7 @@ class NotificationRouter:
                     recipient_id="SIGNAL_001",
                     name="Signal Officer",
                     role=RecipientRole.SIGNALLING_OFFICER,
-                    phone="+919999999999",
+                    phone=emergency_phone,
                     email="signal@ir.gov.in",
                     app_user_id="signal_001"
                 ),
@@ -481,7 +584,9 @@ class NotificationRouter:
     
     def _send_via_channel(self, msg: NotificationMessage, channel: NotificationChannel) -> bool:
         """Send message via specified channel"""
-        if channel == NotificationChannel.SMS:
+        if channel == NotificationChannel.VOICE:
+            return self.voice_backend.send(msg)
+        elif channel == NotificationChannel.SMS:
             return self.sms_backend.send(msg)
         elif channel == NotificationChannel.EMAIL:
             return self.email_backend.send(msg)

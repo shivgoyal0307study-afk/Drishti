@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline } from 'react-leaflet'
 import { Link } from 'react-router-dom'
+import { CARTO_DARK_TILES } from '../api'
 import 'leaflet/dist/leaflet.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ export default function NetworkMap() {
   const [showPanel,   setShowPanel]   = useState(true)
 
   const TILES = {
-    dark:    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    dark:    CARTO_DARK_TILES,
     terrain: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
   }
 

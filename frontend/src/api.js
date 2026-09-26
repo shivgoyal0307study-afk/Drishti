@@ -33,6 +33,11 @@ export const WS_BASE = (() => {
   return 'wss://drishti-api.onrender.com/ws'
 })()
 
+export const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY || import.meta.env.VITE_CARTO_MAP_KEY || 'cb1_3yw7_1_7c92472e3e299d7989639545'
+export const CARTO_DARK_TILES = CARTO_KEY
+  ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`
+  : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+
 const BASE = API_BASE
 
 async function _get(path) {

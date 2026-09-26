@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { CARTO_DARK_TILES } from '../api';
 import './Simulation.css';
 
 /* ─────────────────────────────── SVG Network ─────────────────────────────── */
@@ -630,7 +631,7 @@ export default function Simulation() {
               className="map-container-leaflet"
             >
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                url={CARTO_DARK_TILES}
                 attribution='&copy; <a href="https://carto.com/">CARTO</a>'
               />
               <MapUpdater selectedIncident={selectedIncident} />

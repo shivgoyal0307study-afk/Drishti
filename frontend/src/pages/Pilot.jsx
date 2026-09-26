@@ -15,7 +15,7 @@ import {
   Polyline, Popup, Tooltip, useMap
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { API_BASE, WS_BASE } from '../api'
+import { API_BASE, WS_BASE, CARTO_DARK_TILES } from '../api'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ZONE DEFINITIONS
@@ -593,7 +593,7 @@ export default function HowrahPilot() {
             style={{ height:'100%', width:'100%', background:'#02040f' }}
           >
             <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url={CARTO_DARK_TILES}
               attribution="DRISHTI·HWH Pilot v2 · © CARTO"
             />
             {/* OpenRailwayMap overlay for actual track lines */}
