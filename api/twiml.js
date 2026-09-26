@@ -18,22 +18,40 @@ export default function handler(req, res) {
   const reason = (query.reason || body.reason || 'Point Interlocking / SPAD Safety Alert').replace(/<|>/g, '')
   const action = (query.action || body.action || 'Immediate speed reduction order issued by Section Controller.').replace(/<|>/g, '')
 
+  function escapeXml(unsafe) {
+    return (unsafe || '').replace(/[<>&'"]/g, (c) => {
+      switch (c) {
+        case '<': return '&lt;'
+        case '>': return '&gt;'
+        case '&': return '&amp;'
+        case '\'': return '&apos;'
+        case '"': return '&quot;'
+      }
+    })
+  }
+
+  const xmlTrain = escapeXml(trainId)
+  const xmlStation = escapeXml(station)
+  const xmlRole = escapeXml(role)
+  const xmlReason = escapeXml(reason)
+  const xmlAction = escapeXml(action)
+
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Pause length="2"/>
-  <Say voice="Polly.Aditi" language="en-IN">
+  <Say voice="alice" language="en-IN">
     Emergency Alert. Emergency Alert.
     This is Drishti Railway Operations Control with an urgent safety transmission.
-    Calling ${role} of train number ${trainId} approaching station ${station}.
-    The critical reason for this emergency call is: ${reason}.
-    I repeat, the reason for this emergency call is: ${reason}.
-    Direct order from Section Controller: ${action}.
+    Calling ${xmlRole} of train number ${xmlTrain} approaching station ${xmlStation}.
+    The critical reason for this emergency call is: ${xmlReason}.
+    I repeat, the reason for this emergency call is: ${xmlReason}.
+    Direct order from Section Controller: ${xmlAction}.
     Acknowledge and comply immediately.
   </Say>
   <Pause length="2"/>
-  <Say voice="Polly.Aditi" language="en-IN">
-    Repeating emergency dispatch for train ${trainId} approaching ${station}.
-    Emergency reason: ${reason}.
+  <Say voice="alice" language="en-IN">
+    Repeating emergency dispatch for train ${xmlTrain} approaching station ${xmlStation}.
+    Emergency reason: ${xmlReason}.
     Take immediate safety action.
   </Say>
 </Response>`

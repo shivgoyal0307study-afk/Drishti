@@ -76,26 +76,36 @@ export default async function handler(req, res) {
       })
     }
 
-    // Voice Call TwiML: Speaks the reason clearly, pauses for audio connection, and repeats
-    const twiml = `<Response><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Emergency Alert. Emergency Alert. This is Drishti Railway Operations Control with an urgent safety transmission. Calling ${role} of train number ${trainId} approaching station ${station}. The critical reason for this emergency call is: ${cleanReason}. I repeat, the reason for this emergency call is: ${cleanReason}. Direct order from Section Controller: ${cleanAction}. Acknowledge and comply immediately.</Say><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Repeating emergency dispatch for train ${trainId} approaching ${station}. Emergency reason: ${cleanReason}. Take immediate safety action.</Say></Response>`
+    function escapeXml(unsafe) {
+      return (unsafe || '').replace(/[<>&'"]/g, (c) => {
+        switch (c) {
+          case '<': return '&lt;'
+          case '>': return '&gt;'
+          case '&': return '&amp;'
+          case '\'': return '&apos;'
+          case '"': return '&quot;'
+        }
+      })
+    }
 
-    // High availability: Dedicated HTTPS TwiML endpoint on Vercel
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'drishtirailway.vercel.app'
-    const proto = req.headers['x-forwarded-proto'] || 'https'
-    const queryParams = new URLSearchParams({
-      train_id: trainId,
-      station,
-      role,
-      reason: cleanReason,
-      action: cleanAction,
-    })
-    const twimlUrl = `${proto}://${host}/api/twiml?${queryParams.toString()}`
+    const xmlReason = escapeXml(cleanReason)
+    const xmlAction = escapeXml(cleanAction)
+    const xmlRole = escapeXml(role)
+    const xmlTrain = escapeXml(trainId)
+    const xmlStation = escapeXml(station)
+
+    // Voice Call TwiML: Speaks the reason clearly, pauses for audio connection, and repeats
+    // Uses alice voice with language="en-IN" (Indian English) which is universally supported across all Twilio accounts
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Pause length="2"/><Say voice="alice" language="en-IN">Emergency Alert. Emergency Alert. This is Drishti Railway Operations Control with an urgent safety transmission. Calling ${xmlRole} of train number ${xmlTrain} approaching station ${xmlStation}. The critical reason for this emergency call is: ${xmlReason}. I repeat, the reason for this emergency call is: ${xmlReason}. Direct order from Section Controller: ${xmlAction}. Acknowledge and comply immediately.</Say><Pause length="2"/><Say voice="alice" language="en-IN">Repeating emergency dispatch for train ${xmlTrain} approaching station ${xmlStation}. Emergency reason: ${xmlReason}. Take immediate safety action.</Say></Response>`
+
+    // Twimlets echo URL over HTTPS: self-contained, zero external server dependencies, resolves internally within Twilio
+    const echoUrl = 'https://twimlets.com/echo?Twiml=' + encodeURIComponent(twiml)
 
     // NOTE: Twilio trial accounts ONLY allow From, To, and Url. Extra parameters trigger HTTP 400.
     const params = new URLSearchParams()
     params.append('From', fromNum)
     params.append('To', phone)
-    params.append('Url', twimlUrl)
+    params.append('Url', echoUrl)
 
     const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
       method: 'POST',

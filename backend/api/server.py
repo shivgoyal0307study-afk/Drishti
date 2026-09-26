@@ -1033,40 +1033,51 @@ async def dispatch_voice_call(request: Request):
                     "dispatched_by": "DRISHTI_SECTION_CONSOLE",
                 }
 
+            def escape_xml(s: str) -> str:
+                return (
+                    (s or "")
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace('"', "&quot;")
+                    .replace("'", "&apos;")
+                )
+
+            xml_reason = escape_xml(clean_reason)
+            xml_action = escape_xml(clean_action)
+            xml_role = escape_xml(role)
+            xml_train = escape_xml(train_id)
+            xml_station = escape_xml(station)
+
             # Voice Call: pauses 2s, announces the emergency reason loudly, repeats reason, then delivers order
             twiml = (
+                f'<?xml version="1.0" encoding="UTF-8"?>'
                 f'<Response>'
                 f'<Pause length="2"/>'
-                f'<Say voice="Polly.Aditi" language="en-IN">'
+                f'<Say voice="alice" language="en-IN">'
                 f'Emergency Alert. Emergency Alert. '
                 f'This is Drishti Railway Operations Control with an urgent safety transmission. '
-                f'Calling {role} of train number {train_id} approaching station {station}. '
-                f'The critical reason for this emergency call is: {clean_reason}. '
-                f'I repeat, the reason for this emergency call is: {clean_reason}. '
-                f'Direct order from Section Controller: {clean_action}. '
+                f'Calling {xml_role} of train number {xml_train} approaching station {xml_station}. '
+                f'The critical reason for this emergency call is: {xml_reason}. '
+                f'I repeat, the reason for this emergency call is: {xml_reason}. '
+                f'Direct order from Section Controller: {xml_action}. '
                 f'Acknowledge and comply immediately.'
                 f'</Say>'
                 f'<Pause length="2"/>'
-                f'<Say voice="Polly.Aditi" language="en-IN">'
-                f'Repeating emergency dispatch for train {train_id} approaching {station}. '
-                f'Emergency reason: {clean_reason}. '
+                f'<Say voice="alice" language="en-IN">'
+                f'Repeating emergency dispatch for train {xml_train} approaching {xml_station}. '
+                f'Emergency reason: {xml_reason}. '
                 f'Take immediate safety action.'
                 f'</Say>'
                 f'</Response>'
             )
-            # High-availability: Dedicated HTTPS TwiML endpoint on Vercel
-            query_str = urllib.parse.urlencode({
-                "train_id": train_id,
-                "station": station,
-                "role": role,
-                "reason": clean_reason,
-                "action": clean_action,
-            })
-            twiml_url = f"https://drishtirailway.vercel.app/api/twiml?{query_str}"
+
+            # Self-contained HTTPS Twimlets URL: zero external server dependency, resolves in milliseconds
+            echo_url = f"https://twimlets.com/echo?Twiml={urllib.parse.quote(twiml)}"
 
             # NOTE: Twilio trial accounts ONLY allow url, from_, to. Extra parameters cause HTTP 400.
             live_call = client.calls.create(
-                url=twiml_url,
+                url=echo_url,
                 from_=from_number,
                 to=phone,
             )

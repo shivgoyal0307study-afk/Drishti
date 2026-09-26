@@ -6,6 +6,10 @@
       "destination": "/api/dispatch"
     },
     {
+      "source": "/api/twiml",
+      "destination": "/api/twiml"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://drishti-api.onrender.com/api/:path*"
     },
