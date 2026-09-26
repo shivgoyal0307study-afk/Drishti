@@ -30,11 +30,6 @@ export default function EmergencyDispatchModal({
     setCallState('dialing')
     soundFx.playRadioChirp()
 
-    // Simulate carrier progression for realistic operator feedback
-    setTimeout(() => {
-      setCallState('ringing')
-    }, 1200)
-
     try {
       const res = await triggerVoiceDispatch({
         phone,
@@ -44,17 +39,24 @@ export default function EmergencyDispatchModal({
         message,
       })
 
-      setTimeout(() => {
-        setCallState('connected')
-        soundFx.playChime()
-      }, 2400)
+      if (res && res.status === 'ok') {
+        setCallState('ringing')
+        setTimeout(() => {
+          setCallState('connected')
+          soundFx.playChime()
+        }, 1200)
 
-      setTimeout(() => {
-        setCallState('done')
+        setTimeout(() => {
+          setCallState('done')
+          setCallDetails(res)
+        }, 3000)
+      } else {
+        setCallState('error')
         setCallDetails(res)
-      }, 4500)
+      }
     } catch (err) {
       setCallState('error')
+      setCallDetails({ error: err.message })
     }
   }
 
@@ -359,7 +361,7 @@ export default function EmergencyDispatchModal({
                 )}
               </div>
 
-              {callState === 'done' && (
+              {(callState === 'done' || callState === 'error') && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
                   <button
                     onClick={handleReset}
@@ -374,16 +376,16 @@ export default function EmergencyDispatchModal({
                       cursor: 'pointer',
                     }}
                   >
-                    Dispatch Another Call
+                    {callState === 'error' ? 'Retry Dispatch' : 'Dispatch Another Call'}
                   </button>
                   <button
                     onClick={onClose}
                     style={{
                       padding: '8px 20px',
                       borderRadius: 6,
-                      border: '1px solid #22c55e',
-                      background: 'rgba(34, 197, 94, 0.2)',
-                      color: '#4ade80',
+                      border: callState === 'error' ? '1px solid #ef4444' : '1px solid #22c55e',
+                      background: callState === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+                      color: callState === 'error' ? '#f87171' : '#4ade80',
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: 'pointer',

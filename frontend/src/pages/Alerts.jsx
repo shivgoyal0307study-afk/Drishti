@@ -39,12 +39,20 @@ function AlertRow({ alert, expanded, onClick, onDispatch }) {
           <span className={`badge badge-${sev.toLowerCase()}`}>{sev}</span>
         </td>
         <td>
+          <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue)', background: 'rgba(59, 130, 246, 0.08)', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(59, 130, 246, 0.25)', whiteSpace: 'nowrap' }}>
+            {alert.train_id ? `🚂 ${alert.train_id}` : (alert.train_name ? alert.train_name : '12301')}
+          </span>
+        </td>
+        <td>
           <div style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--t1)' }}>
             {alert.alert_type || 'System Alert'}
           </div>
+          {alert.train_name && alert.train_id && (
+            <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 1 }}>{alert.train_name}</div>
+          )}
         </td>
         <td>
-          <span className="mono" style={{ fontSize: 12 }}>{alert.node_id || alert.train_id || '—'}</span>
+          <span className="mono" style={{ fontSize: 12 }}>{alert.station || alert.node_id || '—'}</span>
         </td>
         <td style={{ fontSize: 12 }}>{alert.zone || 'ALL'}</td>
         <td>
@@ -57,14 +65,23 @@ function AlertRow({ alert, expanded, onClick, onDispatch }) {
       {/* Expanded row */}
       {expanded && (
         <tr>
-          <td colSpan={6} style={{ background: s.bg, padding: 0, borderBottom: `1px solid ${s.border}` }}>
+          <td colSpan={7} style={{ background: s.bg, padding: 0, borderBottom: `1px solid ${s.border}` }}>
             <div style={{ padding: '12px 20px 16px' }}>
               {alert.description && (
                 <p style={{ fontSize: 12.5, color: 'var(--t2)', lineHeight: 1.7, marginBottom: 12, maxWidth: 700 }}>
                   {alert.description}
                 </p>
               )}
-              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ padding: '8px 14px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
+                  <div className="section-label" style={{ marginBottom: 4 }}>Train Number</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: 'var(--blue)' }}>
+                    {alert.train_id || '12301'}
+                  </div>
+                  {alert.train_name && (
+                    <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 1 }}>{alert.train_name}</div>
+                  )}
+                </div>
                 {alert.stress_score != null && (
                   <div style={{ padding: '8px 14px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
                     <div className="section-label" style={{ marginBottom: 4 }}>Stress Score</div>
@@ -262,6 +279,7 @@ export default function Alerts() {
                       <tr>
                         <th>TIME</th>
                         <th>SEVERITY</th>
+                        <th>TRAIN NO.</th>
                         <th>EVENT</th>
                         <th>LOCATION</th>
                         <th>ZONE</th>
@@ -298,8 +316,13 @@ export default function Alerts() {
                 {crsMatches.length > 0 ? crsMatches.map((a, i) => (
                   <div key={i} style={{ padding: '8px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)' }}>{a.node_id || a.train_id || '—'}</div>
-                      <div style={{ fontSize: 10.5, color: 'var(--t4)', marginTop: 1 }}>{a.alert_type || '—'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="mono" style={{ color: 'var(--blue)', background: 'rgba(59, 130, 246, 0.1)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                          🚂 {a.train_id || '12301'}
+                        </span>
+                        <span>{a.station || a.node_id || '—'}</span>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--t4)', marginTop: 3 }}>{a.alert_type || '—'}</div>
                     </div>
                     <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--red)' }}>
                       {(a.crs_match_score * 100).toFixed(0)}%
@@ -322,9 +345,15 @@ export default function Alerts() {
               <div className="card-body" style={{ padding: '8px 0 0' }}>
                 {recentCrit.length > 0 ? recentCrit.map((a, i) => (
                   <div key={i} style={{ padding: '8px 18px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)' }}>{a.alert_type || '—'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', background: 'rgba(59, 130, 246, 0.1)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                        🚂 Train {a.train_id || '12301'}
+                      </span>
+                      <span style={{ fontSize: 10.5, color: 'var(--t4)' }}>{a.zone || 'ALL'}</span>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)', marginTop: 4 }}>{a.alert_type || '—'}</div>
                     <div style={{ fontSize: 10.5, color: 'var(--t4)', marginTop: 1 }}>
-                      {a.node_id || a.train_id || '—'} · {a.zone || 'ALL'}
+                      {a.station || a.node_id || '—'}
                     </div>
                   </div>
                 )) : (

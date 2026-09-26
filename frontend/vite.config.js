@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8001'
+  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
   const backendWsUrl = backendUrl.replace(/^http/, 'ws')
 
   return {

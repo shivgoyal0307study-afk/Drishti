@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/dispatch",
+      "destination": "/api/dispatch"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://drishti-api.onrender.com/api/:path*"
     },
