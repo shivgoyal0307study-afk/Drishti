@@ -1054,10 +1054,22 @@ async def dispatch_voice_call(request: Request):
                 f'</Say>'
                 f'</Response>'
             )
-            # Twilio trial accounts require url parameter instead of inline twiml parameter
-            echo_url = f"http://twimlets.com/echo?Twiml={urllib.parse.quote(twiml)}"
+            # High-availability: Dedicated HTTPS TwiML endpoint on Vercel + HTTPS Twimlets fallback
+            query_str = urllib.parse.urlencode({
+                "train_id": train_id,
+                "station": station,
+                "role": role,
+                "reason": clean_reason,
+                "action": clean_action,
+            })
+            twiml_url = f"https://drishtirailway.vercel.app/api/twiml?{query_str}"
+            fallback_url = f"https://twimlets.com/echo?Twiml={urllib.parse.quote(twiml)}"
+
             live_call = client.calls.create(
-                url=echo_url,
+                url=twiml_url,
+                fallback_url=fallback_url,
+                method="POST",
+                fallback_method="GET",
                 from_=from_number,
                 to=phone,
             )

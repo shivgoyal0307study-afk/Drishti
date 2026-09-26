@@ -77,13 +77,28 @@ export default async function handler(req, res) {
     }
 
     // Voice Call TwiML: Speaks the reason clearly, pauses for audio connection, and repeats
-    const twiml = `<Response><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Emergency Alert. Emergency Alert. This is Drishti Railway Operations Control with an urgent safety transmission. Calling ${role} of train number ${trainId} approaching ${station}. The critical reason for this emergency call is: ${cleanReason}. I repeat, the reason for this emergency call is: ${cleanReason}. Direct order from Section Controller: ${cleanAction}. Acknowledge and comply immediately.</Say><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Repeating emergency dispatch for train ${trainId} approaching ${station}. Emergency reason: ${cleanReason}. Comply immediately.</Say></Response>`
-    const echoUrl = 'http://twimlets.com/echo?Twiml=' + encodeURIComponent(twiml)
+    const twiml = `<Response><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Emergency Alert. Emergency Alert. This is Drishti Railway Operations Control with an urgent safety transmission. Calling ${role} of train number ${trainId} approaching station ${station}. The critical reason for this emergency call is: ${cleanReason}. I repeat, the reason for this emergency call is: ${cleanReason}. Direct order from Section Controller: ${cleanAction}. Acknowledge and comply immediately.</Say><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Repeating emergency dispatch for train ${trainId} approaching ${station}. Emergency reason: ${cleanReason}. Take immediate safety action.</Say></Response>`
+
+    // High availability: Dedicated HTTPS TwiML endpoint on Vercel + HTTPS Twimlets fallback (MUST be https:// to avoid 307 redirect)
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'drishtirailway.vercel.app'
+    const proto = req.headers['x-forwarded-proto'] || 'https'
+    const queryParams = new URLSearchParams({
+      train_id: trainId,
+      station,
+      role,
+      reason: cleanReason,
+      action: cleanAction,
+    })
+    const twimlUrl = `${proto}://${host}/api/twiml?${queryParams.toString()}`
+    const fallbackUrl = 'https://twimlets.com/echo?Twiml=' + encodeURIComponent(twiml)
 
     const params = new URLSearchParams()
     params.append('From', fromNum)
     params.append('To', phone)
-    params.append('Url', echoUrl)
+    params.append('Url', twimlUrl)
+    params.append('FallbackUrl', fallbackUrl)
+    params.append('Method', 'POST')
+    params.append('FallbackMethod', 'GET')
 
     const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
       method: 'POST',
