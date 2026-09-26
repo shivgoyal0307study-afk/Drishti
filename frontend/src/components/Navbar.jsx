@@ -1,15 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { API_BASE } from '../api'
+import { soundFx } from '../utils/audio'
+import EmergencyDispatchModal from './EmergencyDispatchModal'
 
 // ── Navigation groups ─────────────────────────────────────────────────────────
 const GROUPS = [
   {
     label: 'Operations',
     items: [
-      { to: '/dashboard',  label: 'Dashboard',  icon: '▣' },
-      { to: '/trains',     label: 'Trains',      icon: '⊡' },
-      { to: '/alerts',     label: 'Alerts',      icon: '⚑' },
+      { to: '/dashboard',    label: 'Dashboard',    icon: '▣' },
+      { to: '/trains',       label: 'Trains',       icon: '⊡' },
+      { to: '/string-chart', label: 'String Chart', icon: '☵' },
+      { to: '/alerts',       label: 'Alerts',       icon: '⚑' },
     ],
   },
   {
@@ -97,6 +100,9 @@ export default function Navbar() {
   const navigate = useNavigate()
   const [critCount, setCritCount] = useState(0)
   const [connected, setConnected] = useState(false)
+  const [muted, setMuted] = useState(() => soundFx.isMuted())
+  const [dispatchModalOpen, setDispatchModalOpen] = useState(false)
+  const prevCritRef = useRef(0)
 
   // Apply saved theme on mount
   useEffect(() => {
@@ -105,6 +111,14 @@ export default function Navbar() {
       if (saved) document.documentElement.setAttribute('data-theme', saved)
     } catch {}
   }, [])
+
+  const toggleAudio = () => {
+    const next = soundFx.toggleMute()
+    setMuted(next)
+    if (!next) {
+      soundFx.playChime()
+    }
+  }
 
   useEffect(() => {
     const check = async () => {
@@ -123,7 +137,12 @@ export default function Navbar() {
         if (res.ok) {
           const d = await res.json()
           const arr = Array.isArray(d) ? d : (d.alerts ?? [])
-          setCritCount(arr.filter(a => a.severity === 'CRITICAL').length)
+          const count = arr.filter(a => a.severity === 'CRITICAL').length
+          if (count > prevCritRef.current && count > 0) {
+            soundFx.playEmergencySiren()
+          }
+          prevCritRef.current = count
+          setCritCount(count)
         }
       } catch { /* silent */ }
     }
@@ -230,6 +249,49 @@ export default function Navbar() {
       {/* ── Right controls ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 8 }}>
 
+        {/* Audio Alerts Toggle */}
+        <button
+          onClick={toggleAudio}
+          title={muted ? 'Enable Operations Audio Alerts' : 'Mute Operations Audio Alerts'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '5px 9px',
+            border: muted ? '1px solid var(--border)' : '1px solid rgba(59, 130, 246, 0.4)',
+            borderRadius: 'var(--r-sm)',
+            background: muted ? 'var(--bg-raised)' : 'rgba(59, 130, 246, 0.1)',
+            color: muted ? 'var(--t4)' : 'var(--blue)',
+            fontSize: 11.5, fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all var(--fast)',
+          }}
+        >
+          <span>{muted ? '🔇' : '🔊'}</span>
+          <span>{muted ? 'Muted' : 'Audio On'}</span>
+        </button>
+
+        {/* Quick Voice Dispatch Button */}
+        <button
+          onClick={() => setDispatchModalOpen(true)}
+          title="Initiate Emergency Voice Dispatch Call via Twilio"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '5px 10px',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            borderRadius: 'var(--r-sm)',
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.25))',
+            color: '#f87171',
+            fontSize: 11.5, fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all var(--fast)',
+            boxShadow: '0 0 10px rgba(239, 68, 68, 0.15)',
+          }}
+        >
+          <span>⚡</span>
+          <span>Dispatch</span>
+        </button>
+
+        <div style={{ width: 1, height: 28, background: 'var(--border)' }} />
+
         <ISTClock />
 
         <div style={{ width: 1, height: 28, background: 'var(--border)' }} />
@@ -250,6 +312,14 @@ export default function Navbar() {
           {connected ? 'LIVE' : 'OFFLINE'}
         </div>
       </div>
+
+      <EmergencyDispatchModal
+        isOpen={dispatchModalOpen}
+        onClose={() => setDispatchModalOpen(false)}
+        initialTrainId="12301"
+        initialStation="Howrah Division"
+        initialReason="Section Controller Emergency Intervention: Potential Conflict Ahead"
+      />
     </nav>
   )
 }

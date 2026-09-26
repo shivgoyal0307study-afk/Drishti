@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { getCurrentTrains } from '../api'
+import { getCurrentTrains, triggerKavachOverride } from '../api'
+import { soundFx } from '../utils/audio'
+import EmergencyDispatchModal from '../components/EmergencyDispatchModal'
 
 const SEVERITIES = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'STABLE']
 const ZONES      = ['ALL', 'NR', 'CR', 'WR', 'ER', 'SR', 'SER', 'NFR', 'NWR', 'SCR']
@@ -13,14 +15,31 @@ const SEV_MAP = {
 }
 
 export default function Trains() {
-  const [trains,   setTrains]   = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [sev,      setSev]      = useState('ALL')
-  const [zone,     setZone]     = useState('ALL')
-  const [search,   setSearch]   = useState('')
-  const [sortKey,  setSortKey]  = useState('train_id')
-  const [sortAsc,  setSortAsc]  = useState(true)
-  const [live,     setLive]     = useState(false)
+  const [trains,       setTrains]       = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [sev,          setSev]          = useState('ALL')
+  const [zone,         setZone]         = useState('ALL')
+  const [search,       setSearch]       = useState('')
+  const [sortKey,      setSortKey]      = useState('train_id')
+  const [sortAsc,      setSortAsc]      = useState(true)
+  const [live,         setLive]         = useState(false)
+  const [haltedTrains, setHaltedTrains] = useState({})
+  const [dispatchData, setDispatchData] = useState(null)
+  const [kavachNotice, setKavachNotice] = useState(null)
+
+  const handleKavach = async (t) => {
+    soundFx.playKavachBrake()
+    setHaltedTrains(prev => ({ ...prev, [t.train_id]: true }))
+    setKavachNotice({
+      trainId: t.train_id,
+      trainName: t.train_name,
+      time: new Date().toLocaleTimeString('en-IN'),
+    })
+    try {
+      await triggerKavachOverride(t.train_id, 'Section Controller Manual TCAS Trigger', 'OPERATOR-CONSOLE')
+    } catch {}
+    setTimeout(() => setKavachNotice(null), 8000)
+  }
 
   const load = async () => {
     try {
@@ -133,6 +152,36 @@ export default function Trains() {
           </select>
         </div>
 
+        {/* ── Kavach Notice Banner ── */}
+        {kavachNotice && (
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.25), rgba(15, 23, 42, 0.7))',
+            border: '1px solid #ef4444',
+            borderRadius: 8,
+            padding: '10px 16px',
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 0 20px rgba(239, 68, 68, 0.2)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>⚡</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#f87171' }}>
+                  KAVACH TCAS EMERGENCY BRAKE ENGAGED: Train {kavachNotice.trainId} ({kavachNotice.trainName})
+                </div>
+                <div style={{ fontSize: 11, color: '#cbd5e1' }}>
+                  Traction cut commanded · Electro-pneumatic brake cylinders pressurized · Speed clamped to 0 km/h · {kavachNotice.time}
+                </div>
+              </div>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, background: '#ef4444', color: '#fff', padding: '3px 8px', borderRadius: 4 }}>
+              TRIP HALT ACTIVE
+            </span>
+          </div>
+        )}
+
         {/* ── Main table ── */}
         <div className="card">
           {loading ? (
@@ -152,11 +201,12 @@ export default function Trains() {
                     <SortTh k="stress_level"   label="STRESS" />
                     <SortTh k="speed"          label="SPEED" />
                     <SortTh k="delay_minutes"  label="DELAY" />
+                    <th style={{ textAlign: 'right' }}>COMMAND ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7}>
+                    <tr><td colSpan={8}>
                       <div className="empty-state">
                         <div className="empty-state-icon">⊡</div>
                         <div className="empty-state-title">No trains found</div>
@@ -168,9 +218,9 @@ export default function Trains() {
                       </div>
                     </td></tr>
                   ) : filtered.map(t => {
-                    const sMap = SEV_MAP[t.stress_level] || SEV_MAP.STABLE
+                    const isHalted = !!haltedTrains[t.train_id]
                     return (
-                      <tr key={t.train_id} className={t.stress_level === 'CRITICAL' ? 'row-critical' : t.stress_level === 'HIGH' ? 'row-high' : ''}>
+                      <tr key={t.train_id} className={isHalted ? 'row-critical' : t.stress_level === 'CRITICAL' ? 'row-critical' : t.stress_level === 'HIGH' ? 'row-high' : ''}>
                         <td>
                           <span className="mono" style={{ fontWeight: 700, color: 'var(--blue)', fontSize: 12 }}>
                             {t.train_id}
@@ -186,19 +236,62 @@ export default function Trains() {
                           <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--t2)' }}>{t.zone || '—'}</span>
                         </td>
                         <td>
-                          <span className={`badge badge-${(t.stress_level || 'STABLE').toLowerCase()}`}>
-                            {t.stress_level || 'STABLE'}
-                          </span>
+                          {isHalted ? (
+                            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#ef4444', fontWeight: 800 }}>
+                              ⚡ KAVACH HALTED
+                            </span>
+                          ) : (
+                            <span className={`badge badge-${(t.stress_level || 'STABLE').toLowerCase()}`}>
+                              {t.stress_level || 'STABLE'}
+                            </span>
+                          )}
                         </td>
                         <td>
-                          <span className="mono" style={{ fontSize: 12 }}>
-                            {t.speed != null ? `${Math.round(t.speed)} km/h` : '—'}
+                          <span className="mono" style={{ fontSize: 12, color: isHalted ? 'var(--red)' : 'inherit', fontWeight: isHalted ? 800 : 500 }}>
+                            {isHalted ? '0 km/h' : t.speed != null ? `${Math.round(t.speed)} km/h` : '—'}
                           </span>
                         </td>
                         <td>
                           <span className="mono" style={{ fontSize: 12, color: t.delay_minutes > 30 ? 'var(--red)' : 'var(--t2)' }}>
                             {t.delay_minutes != null ? `${Math.round(t.delay_minutes)} min` : '—'}
                           </span>
+                        </td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', gap: 6 }}>
+                            <button
+                              onClick={() => handleKavach(t)}
+                              title="Engage Kavach TCAS Emergency Auto-Braking"
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: 4,
+                                border: isHalted ? '1px solid #ef4444' : '1px solid rgba(239, 68, 68, 0.4)',
+                                background: isHalted ? '#ef4444' : 'rgba(239, 68, 68, 0.1)',
+                                color: isHalted ? '#fff' : '#f87171',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {isHalted ? '✓ Halted' : '⚡ Kavach'}
+                            </button>
+                            <button
+                              onClick={() => setDispatchData({ isOpen: true, trainId: t.train_id, station: t.current_station || 'Howrah Division' })}
+                              title="Place Emergency Voice Call to Loco Pilot"
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: 4,
+                                border: '1px solid var(--border)',
+                                background: 'var(--bg-raised)',
+                                color: 'var(--t2)',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              📞 Call
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -216,6 +309,16 @@ export default function Trains() {
           </div>
         )}
       </div>
+
+      {dispatchData && (
+        <EmergencyDispatchModal
+          isOpen={dispatchData.isOpen}
+          onClose={() => setDispatchData(null)}
+          initialTrainId={dispatchData.trainId}
+          initialStation={dispatchData.station}
+          initialReason="Critical telemetry anomaly: Pilot immediate attention requested"
+        />
+      )}
     </div>
   )
 }

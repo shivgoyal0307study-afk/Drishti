@@ -12,6 +12,7 @@ import System from './pages/System'
 import Simulation from './pages/Simulation'
 import AIDecisions from './pages/AIDecisions'
 import Inference from './pages/Inference'
+import StringChart from './pages/StringChart'
 import './index.css'
 import './App.css'
 
@@ -35,16 +36,17 @@ export default function App() {
 
         {/* App shell — persistent navbar */}
         <Route element={<AppLayout />}>
-          <Route path="/dashboard"  element={<Dashboard />} />
-          <Route path="/network"    element={<Network />} />
-          <Route path="/pilot"      element={<Pilot />} />
-          <Route path="/trains"     element={<Trains />} />
-          <Route path="/train/:id"  element={<TrainDetail />} />
-          <Route path="/alerts"     element={<Alerts />} />
-          <Route path="/ai"         element={<Models />} />
-          <Route path="/inference"  element={<Inference />} />
-          <Route path="/system"     element={<System />} />
-          <Route path="/simulation" element={<Simulation />} />
+          <Route path="/dashboard"    element={<Dashboard />} />
+          <Route path="/network"      element={<Network />} />
+          <Route path="/pilot"        element={<Pilot />} />
+          <Route path="/trains"       element={<Trains />} />
+          <Route path="/train/:id"    element={<TrainDetail />} />
+          <Route path="/string-chart" element={<StringChart />} />
+          <Route path="/alerts"       element={<Alerts />} />
+          <Route path="/ai"           element={<Models />} />
+          <Route path="/inference"    element={<Inference />} />
+          <Route path="/system"       element={<System />} />
+          <Route path="/simulation"   element={<Simulation />} />
           <Route path="/ai-decisions" element={<AIDecisions />} />
         </Route>
       </Routes>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getAlerts } from '../api'
+import EmergencyDispatchModal from '../components/EmergencyDispatchModal'
 
 const SEVERITIES = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
 const ZONES = ['ALL', 'NR', 'CR', 'WR', 'ER', 'SR', 'SER', 'NFR', 'NWR', 'SCR']
@@ -11,7 +12,7 @@ const SEV_MAP = {
   LOW:      { color: 'var(--green)',  bg: 'var(--green-bg)',  border: 'var(--green-border)',  rowBg: 'transparent' },
 }
 
-function AlertRow({ alert, expanded, onClick }) {
+function AlertRow({ alert, expanded, onClick, onDispatch }) {
   const sev = alert.severity || 'LOW'
   const s = SEV_MAP[sev] || SEV_MAP.LOW
   const ts = alert.timestamp ? new Date(alert.timestamp) : null
@@ -114,6 +115,34 @@ function AlertRow({ alert, expanded, onClick }) {
                   </div>
                 </div>
               )}
+
+              {/* Emergency Voice Dispatch Button on Critical/High Alerts */}
+              {(sev === 'CRITICAL' || sev === 'HIGH') && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDispatch && onDispatch(alert); }}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 6,
+                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                      border: '1px solid #ef4444',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: '0 0 12px rgba(239, 68, 68, 0.3)',
+                    }}
+                  >
+                    <span>⚡ 📞 Dispatch Emergency Voice Call</span>
+                  </button>
+                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                    Trigger automated Twilio alert to Loco Pilot for {alert.node_id || alert.train_id || 'Train'}
+                  </span>
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -123,12 +152,13 @@ function AlertRow({ alert, expanded, onClick }) {
 }
 
 export default function Alerts() {
-  const [alerts,   setAlerts]   = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [severity, setSeverity] = useState('ALL')
-  const [zone,     setZone]     = useState('ALL')
-  const [expanded, setExpanded] = useState(null)
-  const [live,     setLive]     = useState(false)
+  const [alerts,        setAlerts]        = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [severity,      setSeverity]      = useState('ALL')
+  const [zone,          setZone]          = useState('ALL')
+  const [expanded,      setExpanded]      = useState(null)
+  const [live,          setLive]          = useState(false)
+  const [dispatchAlert, setDispatchAlert] = useState(null)
 
   const load = async () => {
     try {
@@ -245,6 +275,7 @@ export default function Alerts() {
                           alert={a}
                           expanded={expanded === i}
                           onClick={() => setExpanded(expanded === i ? null : i)}
+                          onDispatch={(al) => setDispatchAlert(al)}
                         />
                       ))}
                     </tbody>
@@ -308,6 +339,16 @@ export default function Alerts() {
           </div>
         </div>
       </div>
+
+      {dispatchAlert && (
+        <EmergencyDispatchModal
+          isOpen={!!dispatchAlert}
+          onClose={() => setDispatchAlert(null)}
+          initialTrainId={dispatchAlert.train_id || dispatchAlert.node_id || '12301'}
+          initialStation={dispatchAlert.station || dispatchAlert.zone || 'Active Corridor'}
+          initialReason={dispatchAlert.description || dispatchAlert.alert_type || 'Emergency Safety Intervention'}
+        />
+      )}
     </div>
   )
 }
