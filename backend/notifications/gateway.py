@@ -11,6 +11,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Literal
 from enum import Enum
+import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent.parent.parent / ".env"
+    if _env_file.exists():
+        load_dotenv(dotenv_path=_env_file)
+    load_dotenv()
+except Exception:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +238,7 @@ class VoiceBackend(NotificationBackend):
         self.provider = provider
         self.sent_calls = []
         self._last_call_time = 0.0
-        self._cooldown_seconds = 120  # 2-minute cooldown between calls to prevent spamming
+        self._cooldown_seconds = 15  # 15s cooldown between calls
         
     def send(self, msg: NotificationMessage) -> bool:
         """Place an automated voice call"""
@@ -250,6 +261,7 @@ class VoiceBackend(NotificationBackend):
     def _send_twilio_call(self, msg: NotificationMessage, to_phone: str) -> bool:
         import os
         import time
+        import urllib.parse
         now = time.time()
         if (now - self._last_call_time) < self._cooldown_seconds:
             logger.warning(f"[VOICE] Rate limited: {int(self._cooldown_seconds - (now - self._last_call_time))}s cooldown remaining")
@@ -283,8 +295,10 @@ class VoiceBackend(NotificationBackend):
                 f'</Say>'
                 f'</Response>'
             )
+            # Twilio trial accounts require url parameter instead of inline twiml parameter
+            echo_url = f"http://twimlets.com/echo?Twiml={urllib.parse.quote(twiml)}"
             call = client.calls.create(
-                twiml=twiml,
+                url=echo_url,
                 from_=from_number,
                 to=to_phone
             )

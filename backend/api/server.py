@@ -13,6 +13,15 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent.parent.parent / ".env"
+    if _env_file.exists():
+        load_dotenv(dotenv_path=_env_file)
+    load_dotenv()
+except Exception:
+    pass
+
 from fastapi import FastAPI, WebSocket, Query, HTTPException, Depends, Request, status
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -992,27 +1001,32 @@ async def dispatch_voice_call(request: Request):
 
     if account_sid and auth_token and from_number:
         try:
+            import urllib.parse
             from twilio.rest import Client
             client = Client(account_sid, auth_token)
+            clean_msg = msg_text.replace('<', '').replace('>', '')
             twiml = (
                 f'<Response>'
                 f'<Say voice="Polly.Aditi" language="en-IN">'
                 f'Urgent safety transmission from Drishti Railway Intelligence. '
                 f'For {role} of train {train_id} approaching {station}. '
-                f'{msg_text}. Acknowledge and comply immediately.'
+                f'{clean_msg}. Acknowledge and comply immediately.'
                 f'</Say>'
                 f'</Response>'
             )
+            # Twilio trial accounts require url parameter instead of inline twiml parameter
+            echo_url = f"http://twimlets.com/echo?Twiml={urllib.parse.quote(twiml)}"
             live_call = client.calls.create(
-                twiml=twiml,
+                url=echo_url,
                 from_=from_number,
                 to=phone,
             )
             call_sid = live_call.sid
             call_status = live_call.status
+            logger.info(f"[DISPATCH CALL] Twilio call created: SID {call_sid}, status {call_status} to {phone}")
         except Exception as tw_err:
-            logger.warning(f"[DISPATCH CALL] Twilio call dispatch warning: {tw_err}")
-            call_status = "queued_fallback"
+            logger.error(f"[DISPATCH CALL] Twilio call failed: {tw_err}")
+            call_status = "error_fallback"
 
     return {
         "status": "ok",
