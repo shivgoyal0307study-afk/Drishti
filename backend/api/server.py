@@ -1054,7 +1054,7 @@ async def dispatch_voice_call(request: Request):
                 f'</Say>'
                 f'</Response>'
             )
-            # High-availability: Dedicated HTTPS TwiML endpoint on Vercel + HTTPS Twimlets fallback
+            # High-availability: Dedicated HTTPS TwiML endpoint on Vercel
             query_str = urllib.parse.urlencode({
                 "train_id": train_id,
                 "station": station,
@@ -1063,13 +1063,10 @@ async def dispatch_voice_call(request: Request):
                 "action": clean_action,
             })
             twiml_url = f"https://drishtirailway.vercel.app/api/twiml?{query_str}"
-            fallback_url = f"https://twimlets.com/echo?Twiml={urllib.parse.quote(twiml)}"
 
+            # NOTE: Twilio trial accounts ONLY allow url, from_, to. Extra parameters cause HTTP 400.
             live_call = client.calls.create(
                 url=twiml_url,
-                fallback_url=fallback_url,
-                method="POST",
-                fallback_method="GET",
                 from_=from_number,
                 to=phone,
             )
