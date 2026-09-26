@@ -25,14 +25,59 @@ export default async function handler(req, res) {
     const trainId = body.train_id || '12301'
     const station = body.station || 'Howrah Jn'
     const role = body.role || 'Loco Pilot'
-    const message = body.message || 'Immediate speed reduction order issued by Section Controller.'
+    const channel = body.channel || body.type || 'voice' // 'voice' | 'sms'
+
+    const reason = body.reason || body.alert_type || 'Point Interlocking / SPAD Safety Alert'
+    const action = body.action || body.message || 'Immediate speed reduction order issued by Section Controller.'
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID || ['AC6e4a31', '67124f44', '83b84999', '4ed5295483'].join('')
     const authToken = process.env.TWILIO_AUTH_TOKEN || ['a701036d', '7be29eda', 'c5f400e7', '0ee73fbb'].join('')
     const fromNum = process.env.TWILIO_FROM_NUMBER || '+17372508034'
 
-    const cleanMsg = message.replace(/<|>/g, '')
-    const twiml = `<Response><Say voice="Polly.Aditi" language="en-IN">Urgent safety transmission from Drishti Railway Intelligence. For ${role} of train ${trainId} approaching ${station}. ${cleanMsg}. Acknowledge and comply immediately.</Say></Response>`
+    const cleanReason = reason.replace(/<|>/g, '')
+    const cleanAction = action.replace(/<|>/g, '')
+
+    if (channel === 'sms') {
+      const smsBody = body.sms_body || body.body || 'sms_appointment_reminders'
+      const smsParams = new URLSearchParams()
+      smsParams.append('From', fromNum)
+      smsParams.append('To', phone)
+      smsParams.append('Body', smsBody)
+
+      const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: smsParams.toString()
+      })
+
+      const data = await twilioRes.json()
+      if (!twilioRes.ok) {
+        console.error('Twilio SMS Error:', data)
+        return res.status(twilioRes.status).json({
+          status: 'error',
+          error: data.message || 'Failed to dispatch SMS',
+          data
+        })
+      }
+
+      return res.status(200).json({
+        status: 'ok',
+        channel: 'sms',
+        message_sid: data.sid,
+        recipient: phone,
+        train_id: trainId,
+        station,
+        reason: cleanReason,
+        timestamp: new Date().toISOString(),
+        dispatched_by: 'VERCEL_AUTOMATED_SMS_DISPATCH',
+      })
+    }
+
+    // Voice Call TwiML: Speaks the reason clearly, pauses for audio connection, and repeats
+    const twiml = `<Response><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Emergency Alert. Emergency Alert. This is Drishti Railway Operations Control with an urgent safety transmission. Calling ${role} of train number ${trainId} approaching ${station}. The critical reason for this emergency call is: ${cleanReason}. I repeat, the reason for this emergency call is: ${cleanReason}. Direct order from Section Controller: ${cleanAction}. Acknowledge and comply immediately.</Say><Pause length="2"/><Say voice="Polly.Aditi" language="en-IN">Repeating emergency dispatch for train ${trainId} approaching ${station}. Emergency reason: ${cleanReason}. Comply immediately.</Say></Response>`
     const echoUrl = 'http://twimlets.com/echo?Twiml=' + encodeURIComponent(twiml)
 
     const params = new URLSearchParams()
@@ -62,12 +107,15 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       status: 'ok',
+      channel: 'voice',
       call_sid: data.sid,
       call_status: data.status,
       recipient: phone,
       role,
       train_id: trainId,
       station,
+      reason: cleanReason,
+      action: cleanAction,
       timestamp: new Date().toISOString(),
       dispatched_by: 'VERCEL_SERVERLESS_DISPATCH',
     })

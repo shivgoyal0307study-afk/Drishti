@@ -993,6 +993,10 @@ async def dispatch_voice_call(request: Request):
     role = data.get("role", "Loco Pilot")
     msg_text = data.get("message", "Attention Loco Pilot. Immediate speed reduction order issued by Section Controller.")
 
+    channel = data.get("channel") or data.get("type", "voice")
+    reason = data.get("reason") or data.get("alert_type", "Point Interlocking / SPAD Safety Alert")
+    action_order = data.get("action") or data.get("message", "Immediate speed reduction order issued by Section Controller.")
+
     call_sid = f"CA{uuid.uuid4().hex[:32]}"
     call_status = "initiated"
 
@@ -1005,13 +1009,48 @@ async def dispatch_voice_call(request: Request):
             import urllib.parse
             from twilio.rest import Client
             client = Client(account_sid, auth_token)
-            clean_msg = msg_text.replace('<', '').replace('>', '')
+
+            clean_reason = reason.replace('<', '').replace('>', '')
+            clean_action = action_order.replace('<', '').replace('>', '')
+
+            if channel == "sms":
+                sms_body = data.get("sms_body") or data.get("body") or "sms_appointment_reminders"
+                msg = client.messages.create(
+                    body=sms_body,
+                    from_=from_number,
+                    to=phone,
+                )
+                logger.info(f"[DISPATCH SMS] Twilio SMS created: SID {msg.sid} to {phone}")
+                return {
+                    "status": "ok",
+                    "channel": "sms",
+                    "message_sid": msg.sid,
+                    "recipient": phone,
+                    "train_id": train_id,
+                    "station": station,
+                    "reason": clean_reason,
+                    "timestamp": datetime.now().isoformat(),
+                    "dispatched_by": "DRISHTI_SECTION_CONSOLE",
+                }
+
+            # Voice Call: pauses 2s, announces the emergency reason loudly, repeats reason, then delivers order
             twiml = (
                 f'<Response>'
+                f'<Pause length="2"/>'
                 f'<Say voice="Polly.Aditi" language="en-IN">'
-                f'Urgent safety transmission from Drishti Railway Intelligence. '
-                f'For {role} of train {train_id} approaching {station}. '
-                f'{clean_msg}. Acknowledge and comply immediately.'
+                f'Emergency Alert. Emergency Alert. '
+                f'This is Drishti Railway Operations Control with an urgent safety transmission. '
+                f'Calling {role} of train number {train_id} approaching station {station}. '
+                f'The critical reason for this emergency call is: {clean_reason}. '
+                f'I repeat, the reason for this emergency call is: {clean_reason}. '
+                f'Direct order from Section Controller: {clean_action}. '
+                f'Acknowledge and comply immediately.'
+                f'</Say>'
+                f'<Pause length="2"/>'
+                f'<Say voice="Polly.Aditi" language="en-IN">'
+                f'Repeating emergency dispatch for train {train_id} approaching {station}. '
+                f'Emergency reason: {clean_reason}. '
+                f'Take immediate safety action.'
                 f'</Say>'
                 f'</Response>'
             )
@@ -1027,12 +1066,15 @@ async def dispatch_voice_call(request: Request):
             logger.info(f"[DISPATCH CALL] Twilio call created: SID {call_sid}, status {call_status} to {phone}")
             return {
                 "status": "ok",
+                "channel": "voice",
                 "call_sid": call_sid,
                 "call_status": call_status,
                 "recipient": phone,
                 "role": role,
                 "train_id": train_id,
                 "station": station,
+                "reason": clean_reason,
+                "action": clean_action,
                 "timestamp": datetime.now().isoformat(),
                 "dispatched_by": "DRISHTI_SECTION_CONSOLE",
             }

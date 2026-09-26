@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getAlerts } from '../api'
+import { getAlerts, triggerAutoCriticalSMS } from '../api'
 import EmergencyDispatchModal from '../components/EmergencyDispatchModal'
 
 const SEVERITIES = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
@@ -56,9 +56,11 @@ function AlertRow({ alert, expanded, onClick, onDispatch }) {
         </td>
         <td style={{ fontSize: 12 }}>{alert.zone || 'ALL'}</td>
         <td>
-          <span style={{ fontSize: 11, color: 'var(--t4)' }}>
-            {expanded ? '▲ Hide' : '▼ Detail'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 11, color: 'var(--t4)' }}>
+              {expanded ? '▲' : '▼'}
+            </span>
+          </div>
         </td>
       </tr>
 
@@ -134,8 +136,8 @@ function AlertRow({ alert, expanded, onClick, onDispatch }) {
               )}
 
               {/* Emergency Voice Dispatch Button on Critical/High Alerts */}
-              {(sev === 'CRITICAL' || sev === 'HIGH') && (
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                {(sev === 'CRITICAL' || sev === 'HIGH') && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onDispatch && onDispatch(alert); }}
                     style={{
@@ -155,11 +157,11 @@ function AlertRow({ alert, expanded, onClick, onDispatch }) {
                   >
                     <span>⚡ 📞 Dispatch Emergency Voice Call</span>
                   </button>
-                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>
-                    Trigger automated Twilio alert to Loco Pilot for {alert.node_id || alert.train_id || 'Train'}
-                  </span>
-                </div>
-              )}
+                )}
+                <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                  Direct Section Controller cab intervention for {alert.train_id || 'Train'}
+                </span>
+              </div>
             </div>
           </td>
         </tr>
@@ -182,6 +184,11 @@ export default function Alerts() {
       const d = await getAlerts(200)
       setAlerts(d)
       setLive(true)
+      // Tier-1: Automatically trigger SMS alert for CRITICAL incidents (with built-in 60s cooldown & deduplication)
+      const firstCrit = d.find(a => a.severity === 'CRITICAL')
+      if (firstCrit) {
+        triggerAutoCriticalSMS(firstCrit).catch(() => {})
+      }
     } catch { setLive(false) }
     setLoading(false)
   }
@@ -205,11 +212,42 @@ export default function Alerts() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
             <div className="page-header-title">Alert Command Centre</div>
-            <div className={`live-pill ${live ? 'warning' : 'offline'}`}>
-              <span className="pulse-dot" style={{ background: live ? 'var(--orange)' : 'var(--t4)', animation: live ? 'pulse-dot 1s ease-in-out infinite' : 'none' }} />
-              {live ? 'MONITORING' : 'OFFLINE'}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 20,
+                background: 'rgba(34, 197, 94, 0.1)',
+                border: '1px solid rgba(34, 197, 94, 0.25)',
+                fontSize: 11,
+                fontWeight: 600,
+                color: '#4ade80',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                <span>Tier-1 Auto SMS: Armed (+916268069612 on CRITICAL)</span>
+              </div>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 20,
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                fontSize: 11,
+                fontWeight: 600,
+                color: '#f87171',
+              }}>
+                <span>📞 Voice Call: Manual Dispatch Only</span>
+              </div>
+              <div className={`live-pill ${live ? 'warning' : 'offline'}`}>
+                <span className="pulse-dot" style={{ background: live ? 'var(--orange)' : 'var(--t4)', animation: live ? 'pulse-dot 1s ease-in-out infinite' : 'none' }} />
+                {live ? 'MONITORING' : 'OFFLINE'}
+              </div>
             </div>
           </div>
           <div className="page-header-sub">Real-time safety alerts and CRS historical signature analysis · DRISHTI AI</div>

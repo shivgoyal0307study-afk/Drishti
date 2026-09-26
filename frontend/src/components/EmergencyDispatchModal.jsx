@@ -7,7 +7,7 @@ export default function EmergencyDispatchModal({
   onClose,
   initialTrainId = '12301',
   initialStation = 'Howrah Jn',
-  initialReason = 'Signal Passed At Danger (SPAD) warning'
+  initialReason = 'Point detection anomaly at interlocking crossover. Reverse points not locked to main line.'
 }) {
   if (!isOpen) return null
 
@@ -15,18 +15,27 @@ export default function EmergencyDispatchModal({
   const [phone, setPhone] = useState('+916268069612')
   const [trainId, setTrainId] = useState(initialTrainId)
   const [station, setStation] = useState(initialStation)
-  const [message, setMessage] = useState(initialReason)
+  const [reason, setReason] = useState(initialReason)
+  const [actionOrder, setActionOrder] = useState('Immediate speed reduction to 15 km/h. Halt at outer home signal.')
   const [callState, setCallState] = useState('idle') // idle | dialing | ringing | connected | done | error
   const [callDetails, setCallDetails] = useState(null)
+  const [activeChannel, setActiveChannel] = useState('voice') // 'voice' | 'sms'
 
-  const quickAlerts = [
-    'SPAD Risk: Immediate Stop Order issued for Section Interlocking.',
-    'Track Obstruction Detected: Reduce speed to 15 km/h immediately.',
-    'Kavach TCAS Override: Electro-pneumatic brakes armed for auto-drop.',
-    'Adverse Weather: Severe visibility loss, switch to fog signals.',
+  const quickReasons = [
+    'Point Interlocking Crossover Mismatch — Reverse points not locked to main line',
+    'Signal Passed At Danger (SPAD) Warning — Headway compression detected',
+    'Track Obstruction & Rail Fracture Detected ahead on corridor',
+    'Hot Axle Bearing Thermal Anomaly exceeding safety threshold',
   ]
 
-  const handleDispatch = async () => {
+  const quickOrders = [
+    'Immediate speed reduction to 15 km/h and stand by for Kavach auto-drop.',
+    'Halt train immediately at outer home signal. Do not advance past point.',
+    'Emergency brake application ordered by Section Controller. Isolate traction.',
+  ]
+
+  const handleDispatch = async (channel = 'voice') => {
+    setActiveChannel(channel)
     setCallState('dialing')
     soundFx.playRadioChirp()
 
@@ -36,20 +45,29 @@ export default function EmergencyDispatchModal({
         train_id: trainId,
         station,
         role,
-        message,
+        reason,
+        action: actionOrder,
+        channel,
+        message: `${reason}. Order: ${actionOrder}`,
       })
 
       if (res && res.status === 'ok') {
-        setCallState('ringing')
-        setTimeout(() => {
-          setCallState('connected')
-          soundFx.playChime()
-        }, 1200)
-
-        setTimeout(() => {
+        if (channel === 'sms') {
           setCallState('done')
           setCallDetails(res)
-        }, 3000)
+          soundFx.playChime()
+        } else {
+          setCallState('ringing')
+          setTimeout(() => {
+            setCallState('connected')
+            soundFx.playChime()
+          }, 1200)
+
+          setTimeout(() => {
+            setCallState('done')
+            setCallDetails(res)
+          }, 3000)
+        }
       } else {
         setCallState('error')
         setCallDetails(res)
@@ -83,8 +101,9 @@ export default function EmergencyDispatchModal({
         boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.15)',
         borderRadius: 12,
         width: '100%',
-        maxWidth: 580,
-        overflow: 'hidden',
+        maxWidth: 620,
+        maxHeight: '92vh',
+        overflowY: 'auto',
         color: 'var(--t1, #f1f5f9)',
         fontFamily: 'Inter, sans-serif',
       }}>
@@ -109,10 +128,10 @@ export default function EmergencyDispatchModal({
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '0.04em', color: '#f8fafc' }}>
-                TWILIO VOICE EMERGENCY DISPATCH
+                EMERGENCY DISPATCH CONSOLE
               </div>
               <div style={{ fontSize: 11, color: 'var(--t3, #94a3b8)', letterSpacing: '0.05em' }}>
-                INDIAN RAILWAYS AUTOMATED LOCO CAB BROADCAST
+                TWILIO VOICE & SMS DIRECT INTERVENTION GATEWAY
               </div>
             </div>
           </div>
@@ -122,32 +141,32 @@ export default function EmergencyDispatchModal({
               background: 'transparent',
               border: 'none',
               color: 'var(--t3, #94a3b8)',
-              fontSize: 20,
+              fontSize: 22,
               cursor: 'pointer',
-              padding: '4px 8px',
+              lineHeight: 1,
             }}
           >
-            ✕
+            ×
           </button>
         </div>
 
-        {/* Content Body */}
-        <div style={{ padding: '20px 24px' }}>
-          {callState === 'idle' ? (
+        {/* Modal Body */}
+        <div style={{ padding: 20 }}>
+          {callState === 'idle' && (
             <>
-              {/* Role selection */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>
-                  Target Recipient
+              {/* Recipient Role Selection */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3, #94a3b8)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                  Target Recipient Crew
                 </label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['Loco Pilot', 'Station Master', 'Section Controller'].map(r => (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['Loco Pilot', 'Station Master', 'Guard', 'Section Controller'].map(r => (
                     <button
                       key={r}
                       onClick={() => setRole(r)}
                       style={{
                         flex: 1,
-                        padding: '8px 10px',
+                        padding: '7px 10px',
                         fontSize: 12,
                         fontWeight: 600,
                         borderRadius: 6,
@@ -165,7 +184,7 @@ export default function EmergencyDispatchModal({
               </div>
 
               {/* Target Phone & Train Info Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3, #94a3b8)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
                     Emergency Direct Phone
@@ -227,15 +246,62 @@ export default function EmergencyDispatchModal({
                 </div>
               </div>
 
-              {/* Message Payload */}
+              {/* 1. Explicit Reason for Call */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#f87171', textTransform: 'uppercase' }}>
+                    📢 1. Emergency Reason (Spoken Loudly & Repeated by AI Voice)
+                  </label>
+                  <span style={{ fontSize: 10, color: 'var(--t4, #64748b)' }}>Twilio Polly.Aditi voice</span>
+                </div>
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  placeholder="e.g. Point detection failure at crossover circuit"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'var(--bg-raised, #1e293b)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    borderRadius: 6,
+                    color: '#fef2f2',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 5 }}>
+                  {quickReasons.map(qr => (
+                    <button
+                      key={qr}
+                      onClick={() => setReason(qr)}
+                      style={{
+                        fontSize: 10.5,
+                        padding: '3px 7px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 4,
+                        color: 'var(--t3, #94a3b8)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      ⚡ {qr.split('—')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Controller Action Order */}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3, #94a3b8)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  TwiML Text-to-Speech Script (Polly.Aditi Voice)
+                  🛑 2. Controller Action Order
                 </label>
-                <textarea
-                  rows={3}
-                  value={message}
-                  onChange={e => setMessage(e.target.value)}
+                <input
+                  type="text"
+                  value={actionOrder}
+                  onChange={e => setActionOrder(e.target.value)}
+                  placeholder="e.g. Immediate speed reduction to 15 km/h"
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -244,44 +310,50 @@ export default function EmergencyDispatchModal({
                     borderRadius: 6,
                     color: '#f8fafc',
                     fontSize: 12.5,
-                    lineHeight: 1.5,
-                    resize: 'vertical',
                   }}
                 />
-              </div>
-
-              {/* Quick Preset Buttons */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t4, #64748b)', textTransform: 'uppercase', marginBottom: 6 }}>
-                  Quick Emergency Transmissions:
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {quickAlerts.map(q => (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 5 }}>
+                  {quickOrders.map(qo => (
                     <button
-                      key={q}
-                      onClick={() => setMessage(q)}
+                      key={qo}
+                      onClick={() => setActionOrder(qo)}
                       style={{
-                        textAlign: 'left',
-                        padding: '5px 8px',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        fontSize: 10.5,
+                        padding: '3px 7px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
                         borderRadius: 4,
                         color: 'var(--t3, #94a3b8)',
-                        fontSize: 11,
                         cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        textAlign: 'left',
                       }}
                     >
-                      ⚡ {q}
+                      ⚡ {qo.split('.')[0]}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              {/* Live Audio Script Preview Box */}
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.7)',
+                border: '1px solid #1e293b',
+                borderRadius: 6,
+                padding: '10px 12px',
+                marginBottom: 18,
+                fontSize: 11,
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#38bdf8', letterSpacing: '0.05em', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>🎙️ TWILIO LIVE VOICE PREVIEW (What the {role} will hear):</span>
+                </div>
+                <div style={{ color: '#cbd5e1', fontStyle: 'italic' }}>
+                  "(2s pause)... Emergency Alert. Emergency Alert. Calling {role} of train {trainId} approaching {station}. <strong style={{ color: '#f87171' }}>The critical reason for this emergency call is: {reason || 'Safety alert'}. I repeat, the reason for this emergency call is: {reason || 'Safety alert'}.</strong> Direct order from Section Controller: {actionOrder}. Acknowledge and comply immediately. (2s pause & repeats)..."
+                </div>
+              </div>
+
+              {/* Action Buttons: Direct Voice Call & Direct SMS */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <button
                   onClick={onClose}
                   style={{
@@ -290,35 +362,57 @@ export default function EmergencyDispatchModal({
                     border: '1px solid var(--border, #334155)',
                     background: 'transparent',
                     color: 'var(--t3, #94a3b8)',
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: 600,
                     cursor: 'pointer',
                   }}
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={handleDispatch}
-                  style={{
-                    padding: '8px 20px',
-                    borderRadius: 6,
-                    border: '1px solid #ef4444',
-                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                    color: '#ffffff',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: '0 0 15px rgba(239, 68, 68, 0.4)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <span>⚡ Initiate Emergency Call</span>
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => handleDispatch('sms')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: 6,
+                      border: '1px solid #0284c7',
+                      background: 'rgba(2, 132, 199, 0.15)',
+                      color: '#38bdf8',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <span>💬 Send Direct SMS</span>
+                  </button>
+                  <button
+                    onClick={() => handleDispatch('voice')}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: 6,
+                      border: '1px solid #ef4444',
+                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                      color: '#ffffff',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 0 15px rgba(239, 68, 68, 0.4)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <span>⚡ 📞 Dispatch Voice Call</span>
+                  </button>
+                </div>
               </div>
             </>
-          ) : (
+          )}
+
+          {callState !== 'idle' && (
             /* Live Call Progress State */
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{
@@ -338,25 +432,25 @@ export default function EmergencyDispatchModal({
               </div>
 
               <div style={{ fontSize: 18, fontWeight: 800, color: callState === 'done' ? '#22c55e' : '#f87171', marginBottom: 6 }}>
-                {callState === 'dialing' && 'CONNECTING TWILIO VOICE GATEWAY...'}
+                {callState === 'dialing' && (activeChannel === 'sms' ? 'TRANSMITTING EMERGENCY SMS VIA GATEWAY...' : 'CONNECTING TWILIO VOICE GATEWAY...')}
                 {callState === 'ringing' && `RINGING CAB PHONE (${phone})...`}
-                {callState === 'connected' && 'CALL ACTIVE: TRANSMITTING ALERT (Polly.Aditi)...'}
-                {callState === 'done' && 'EMERGENCY DISPATCH TRANSMITTED'}
+                {callState === 'connected' && 'CALL ACTIVE: SPEAKING EMERGENCY REASON (Polly.Aditi)...'}
+                {callState === 'done' && (activeChannel === 'sms' ? 'EMERGENCY SMS DISPATCHED' : 'EMERGENCY VOICE CALL TRANSMITTED')}
                 {callState === 'error' && 'DISPATCH TIMEOUT / RETRY REQUIRED'}
               </div>
 
-              <div style={{ fontSize: 13, color: 'var(--t3, #94a3b8)', maxWidth: 420, margin: '0 auto 20px', lineHeight: 1.5 }}>
+              <div style={{ fontSize: 13, color: 'var(--t3, #94a3b8)', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
                 {callState === 'done' ? (
                   <span>
-                    Emergency voice dispatch completed to <b>{role}</b> of Train <b>{trainId}</b> at {station}.
+                    Emergency dispatch completed to <b>{role}</b> of Train <b>{trainId}</b> at {station}.
                     <br />
                     <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#38bdf8' }}>
-                      SID: {callDetails?.call_sid || 'CA9283f94082'}
+                      SID: {callDetails?.call_sid || callDetails?.message_sid || 'CA9283f94082'}
                     </span>
                   </span>
                 ) : (
                   <span>
-                    Transmitting automated high-priority instruction: "<i>{message.slice(0, 90)}...</i>"
+                    Spoken Reason: "<i>{reason}</i>"
                   </span>
                 )}
               </div>
@@ -376,7 +470,7 @@ export default function EmergencyDispatchModal({
                       cursor: 'pointer',
                     }}
                   >
-                    {callState === 'error' ? 'Retry Dispatch' : 'Dispatch Another Call'}
+                    {callState === 'error' ? 'Retry Dispatch' : 'Dispatch Another Transmission'}
                   </button>
                   <button
                     onClick={onClose}

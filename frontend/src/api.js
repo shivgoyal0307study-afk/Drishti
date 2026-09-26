@@ -571,16 +571,30 @@ export async function predictBatch(trainIds, featuresList, aggregation = 'mean')
 // ── Emergency Voice Dispatch & Kavach Overrides ───────────────────────────────
 
 /**
- * Dispatch an urgent emergency voice call via Twilio Voice
+ * Dispatch an urgent emergency voice call or SMS via Twilio Voice / SMS Gateway
  */
 export async function triggerVoiceDispatch({
   phone = '+916268069612',
   train_id = '12301',
   station = 'Howrah Jn',
   role = 'Loco Pilot',
-  message = 'Urgent safety speed restriction ordered by Section Controller.',
+  reason = 'Point Interlocking / SPAD Safety Alert',
+  action = 'Immediate speed reduction order issued by Section Controller.',
+  channel = 'voice',
+  message = '',
+  sms_body = 'sms_appointment_reminders',
 } = {}) {
-  const payload = { phone, train_id, station, role, message }
+  const payload = {
+    phone,
+    train_id,
+    station,
+    role,
+    reason: reason || message || 'Critical safety intervention required',
+    action: action || message || 'Immediate speed restriction order issued',
+    channel,
+    message: message || `${reason}. Order: ${action}`,
+    sms_body: sms_body || 'sms_appointment_reminders',
+  }
   let lastError = 'Could not connect to Twilio Gateway. Please verify connectivity.'
 
   // Strategy 1: Try Vercel Serverless Function /api/dispatch (direct Twilio gateway on Vercel)
@@ -634,6 +648,40 @@ export async function triggerVoiceDispatch({
     station,
     timestamp: new Date().toISOString(),
   }
+}
+
+let _lastAutoSmsTimestamp = 0
+const _dispatchedCriticalIds = new Set()
+
+/**
+ * Tier-1 Automated Alert Engine:
+ * Dispatches an automated SMS alert exclusively when severity === 'CRITICAL'.
+ * Incorporates a 60-second cooldown and deduplication so test loops do not flood.
+ */
+export async function triggerAutoCriticalSMS(alert) {
+  if (!alert || alert.severity !== 'CRITICAL') return null
+
+  const alertKey = alert.id || `${alert.train_id}-${alert.station}`
+  if (_dispatchedCriticalIds.has(alertKey)) return null
+
+  const now = Date.now()
+  if (now - _lastAutoSmsTimestamp < 60000) {
+    return null
+  }
+
+  _dispatchedCriticalIds.add(alertKey)
+  _lastAutoSmsTimestamp = now
+
+  console.log('[Tier-1 Auto Alert] 🚨 Auto-dispatching emergency SMS for CRITICAL incident:', alert.train_id, alert.alert_type)
+  return await triggerVoiceDispatch({
+    phone: '+916268069612',
+    train_id: alert.train_id || '12841',
+    station: alert.station || alert.node_id || 'Bahanaga Bazar',
+    role: 'Station Master & Section Controller',
+    reason: alert.alert_type || alert.description || 'CRS Critical Interlocking Point Disparity',
+    action: 'Restrict line speed to 15 km/h immediately and hold home signals.',
+    channel: 'sms',
+  })
 }
 
 /**
